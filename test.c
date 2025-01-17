@@ -17,8 +17,8 @@ int main(int argc, char **argv) {
       perror("ftell"), exit(EXIT_FAILURE);
     rewind(fp);
 
-    free(buf), buf = malloc(size + 1);
-    if (fread(buf, sizeof(*buf), size, fp) != size)
+    buf = realloc(buf, size + 1);
+    if (fread(buf, 1, size, fp) != size)
       perror("fread"), exit(EXIT_FAILURE);
     buf[size] = '\0';
     if (fclose(fp) == EOF)

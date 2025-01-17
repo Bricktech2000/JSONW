@@ -23,13 +23,13 @@ char *jsonw_litstr(char *str, char *json) {
 
 // characters
 
-#define WSCHRWS(CHR, JSON) jsonw_ws(jsonw_litchr(CHR, jsonw_ws(JSON)))
-
 char *jsonw_ws(char *json) {
   while (json && *json && strchr(" \t\n\r", *json))
     json++;
   return json;
 }
+
+#define WSCHRWS(CHR, JSON) jsonw_ws(jsonw_litchr(CHR, jsonw_ws(JSON)))
 
 char *jsonw_beginarr(char *json) { return WSCHRWS('[', json); }
 char *jsonw_endarr(char *json) { return WSCHRWS(']', json); }
@@ -152,10 +152,10 @@ char *jsonw_character(char *chr, char *json) {
 
 char *jsonw_string(size_t *len, char *json) {
   OUT_PARAM(size_t, len);
-  size_t length; // only write to `len` on success
+  size_t length = 0; // only write to `len` on success
   char *j = json = jsonw_beginstr(json);
-  for (length = 0; j = jsonw_character(NULL, j); json = j)
-    length++;
+  while (j = jsonw_character(NULL, j))
+    json = j, length++;
   if (json = jsonw_endstr(json))
     return *len = length, json;
   return NULL;
@@ -171,12 +171,11 @@ char *jsonw_member(char *json) { return jsonw_element(jsonw_name(json)); }
 
 char *jsonw_array(size_t *len, char *json) {
   OUT_PARAM(size_t, len);
-  size_t length; // only write to `len` on success
+  size_t length = 0; // only write to `len` on success
   char *j = json = jsonw_beginarr(json);
   if (j = jsonw_endarr(json))
-    return j;
-  for (length = 0; json = jsonw_value(NULL, json);
-       json = jsonw_valuesep(json), length++)
+    return *len = length, j;
+  for (; json = jsonw_value(NULL, json); json = jsonw_valuesep(json), length++)
     if (j = jsonw_endarr(json))
       return *len = length, j;
   return NULL;
@@ -184,14 +183,14 @@ char *jsonw_array(size_t *len, char *json) {
 
 char *jsonw_object(size_t *len, char *json) {
   OUT_PARAM(size_t, len);
-  size_t length; // only write to `len` on success
+  size_t length = 0; // only write to `len` on success
   char *j = json = jsonw_beginobj(json);
   if (j = jsonw_endobj(json))
-    return j;
-  for (length = 0; json = jsonw_value(NULL, jsonw_name(json));
+    return *len = length, j;
+  for (; json = jsonw_value(NULL, jsonw_name(json));
        json = jsonw_valuesep(json), length++)
     if (j = jsonw_endobj(json))
-      return j;
+      return *len = length, j;
   return NULL;
 }
 
@@ -214,10 +213,12 @@ char *jsonw_structured(jsonw_ty *type, char *json) {
 }
 
 char *jsonw_value(jsonw_ty *type, char *json) {
-  // no need to `OUT_PARAM(json_ty, type)` because we don't dereference it
+  // `jsonw_array` calls `jsonw_value` and `jsonw_value` calls `jsonw_array`,
+  // resulting in a cycle when `json == NULL`. this check breaks that cycle
   if (json == NULL)
     return NULL;
 
+  // no need to `OUT_PARAM(json_ty, type)` because we don't dereference it
   char *j;
   (j = jsonw_primitive(type, json)) || (j = jsonw_structured(type, json));
   return j;
@@ -248,9 +249,9 @@ char *jsonw_index(size_t idx, char *json) {
 char *jsonw_find(char *name, char *json) {
   do
     if (jsonw_strcmp(name, jsonw_beginstr(json)) == 0)
-      break;
-  while ((json = jsonw_member(json)));
-  return json;
+      return json;
+  while (json = jsonw_member(json));
+  return NULL;
 }
 
 char *jsonw_lookup(char *name, char *json) {
