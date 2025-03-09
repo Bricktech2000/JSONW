@@ -37,7 +37,7 @@ Implementation limits:
 Sanity-check RFC 8259 compliance with:
 
 ```sh
-make test
+make bin/test
 sh -c 'cd tests/ && ../bin/test *.json' # should have no output
 ```
 
