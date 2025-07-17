@@ -82,9 +82,9 @@ char *types[] = {"NULL", "BOOLEAN", "NUMBER", "STRING", "ARRAY", "OBJECT"};
 
 int main(void) {
   for (char *memb = jsonw_beginobj(json); memb; memb = jsonw_member(memb)) {
-    char key[64];
+    static char key[64];
     jsonw_ty type;
-    if (jsonw_unescape(key, sizeof(key), jsonw_beginstr(memb)) &&
+    if (jsonw_endstr(jsonw_unescape(key, sizeof(key), jsonw_beginstr(memb))) &&
         jsonw_value(&type, jsonw_name(memb)))
       printf("key '%s' has value of type '%s'\n", key, types[type]);
   }
@@ -176,6 +176,112 @@ nan x 600 x 1
 nan x nan x 1
 nan x nan x 1
 nan x nan x 1
+```
+
+### Safe Serialization
+
+```c
+#include "jsonw.h"
+#include <stdio.h>
+#include <string.h>
+
+struct person {
+  char name[8];
+  short birth;
+};
+
+struct person people[] = {
+    {"John", 1978},
+    {"\"\\\t\5", 0},
+    {"\1\1\1\1\1\1\1", 0},
+};
+
+char *serialize_person(char *buf, size_t size, struct person person) {
+  size_t i = 0;
+  if ((i += snprintf(buf, size, "{ \"name\": \"")) >= size)
+    return NULL;
+  if (*jsonw_escape(buf + i, size - i, person.name) != '\0')
+    return NULL;
+  i += strlen(buf + i);
+  if ((i += snprintf(buf + i, size - i, "\", \"birth\": %hd }",
+                     person.birth)) >= size)
+    return NULL;
+  return buf + i;
+}
+
+int main(void) {
+  for (int i = 0; i < sizeof(people) / sizeof(*people); i++) {
+    static char buf[64];
+    char *end = serialize_person(buf, sizeof(buf), people[i]);
+    printf(end ? "%s\n" : "%s (buffer exhausted)\n", buf);
+  }
+}
+```
+
+```
+{ "name": "John", "birth": 1978 }
+{ "name": "\"\\\t\u0005", "birth": 0 }
+{ "name": "\u0001\u0001\u0001\u0001\u0001\u0001\u0001", "birth" (buffer exhausted)
+```
+
+### Safe Deserialization
+
+```c
+#include "jsonw.h"
+#include <stdio.h>
+
+char *json = "[{ \"name\": \"John\", \"birth\": 1978 }, { \"birth\": 2010 }, "
+             "{ \"name\": \"too long\" }, { \"birth\": 1.2 }, { \"age\": 0 }]";
+
+struct person {
+  char name[8];
+  short birth;
+};
+
+char *deserialize_person(struct person *person, char *json) {
+  if (!jsonw_object(NULL, json))
+    return "expected object";
+
+  for (char *memb = jsonw_beginobj(json); memb; memb = jsonw_member(memb)) {
+    if (jsonw_strcmp("name", jsonw_beginstr(memb)) == 0) {
+      if (!jsonw_endstr(jsonw_unescape(person->name, sizeof(person->name),
+                                       jsonw_beginstr(jsonw_name(memb)))))
+        return "invalid name";
+      continue;
+    }
+
+    if (jsonw_strcmp("birth", jsonw_beginstr(memb)) == 0) {
+      double birth;
+      if (!jsonw_number(&birth, jsonw_name(memb)) ||
+          (person->birth = birth) != birth)
+        return "invalid birth";
+      continue;
+    }
+
+    return "unknown key";
+  }
+
+  return NULL;
+}
+
+int main(void) {
+  for (char *elem = jsonw_beginarr(json); elem; elem = jsonw_element(elem)) {
+    struct person person = {.name = "", .birth = 0};
+    char *err = deserialize_person(&person, elem);
+    if (err == NULL)
+      printf("(struct person){\"%s\", %d}\n", person.name, person.birth);
+    else
+      printf("error: %s\n", err);
+  }
+}
+```
+
+```
+(struct person){"John", 1978}
+(struct person){"", 2010}
+error: invalid name
+error: invalid birth
+error: unknown key
 ```
 
 ### JSON Validation

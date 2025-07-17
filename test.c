@@ -5,7 +5,7 @@
 int main(int argc, char **argv) {
   long size;
   char *buf = NULL;
-  for (argv++; *argv; argv++) {
+  while (*++argv) {
     // printf("parsing %s\n", *argv);
 
     FILE *fp = fopen(*argv, "r");
