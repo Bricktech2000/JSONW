@@ -7,6 +7,9 @@
   if (IDENT == NULL)                                                           \
   IDENT = &_out_param_##IDENT
 
+#define JSON_ESCAPES "\"\\/bfnrt"
+#define JSON_CODEPTS "\"\\/\b\f\n\r\t"
+
 // basic parsers
 
 char *jsonw_litchr(char chr, char *json) {
@@ -106,41 +109,27 @@ char *jsonw_character(char *chr, char *json) {
   if (json == NULL)
     return NULL;
 
-  if (*json == '\\' && ++json) {
-    switch (*json++) {
-    case '"':
-    case '\\':
-    case '/':
-      return *chr = json[-1], json;
-    case 'b':
-      return *chr = '\b', json;
-    case 'f':
-      return *chr = '\f', json;
-    case 'n':
-      return *chr = '\n', json;
-    case 'r':
-      return *chr = '\r', json;
-    case 't':
-      return *chr = '\t', json;
-    case 'u':;
+  if (*json == '\\' && json++) {
+    char *escape, *escapes = JSON_ESCAPES;
+    if (*json && (escape = strchr(escapes, *json)) && json++)
+      return *chr = JSON_CODEPTS[escape - escapes], json;
+
+    if (*json == 'u' && json++) {
       // ISO/IEC 9899:TC3, $5.2.4.2.1: `USHRT_MAX` is at least 65535
-      unsigned short codepoint = 0;
+      unsigned short codept = 0;
       for (int i = 0; i < 4; i++) {
-        codepoint <<= 4;
-        if (isdigit(*json))
-          codepoint |= *json - '0';
-        else if (isxdigit(*json))
-          codepoint |= tolower(*json) - 'a' + 10;
-        else
+        if (!isxdigit(*json))
           return NULL;
-        json++;
+        codept <<= 4;
+        codept |= isdigit(*json) ? *json++ - '0' : tolower(*json++) - 'a' + 10;
       }
 
       // if a '\uXXXX' escape is beyond 7-bit ASCII, return a sentinel '\0'
       // and let clients handle things themselves if they so wish. unicode
       // shenanigans are beyond the scope of this library
-      return *chr = codepoint <= 0x7f ? codepoint : '\0', json;
+      return *chr = codept <= 0x7f ? codept : '\0', json;
     }
+
     return NULL;
   }
 
@@ -258,9 +247,31 @@ char *jsonw_lookup(char *name, char *json) {
   return jsonw_name(jsonw_find(name, json));
 }
 
-char *jsonw_unescape(char *buf, size_t len, char *json) {
-  // `len` shall be strictly greater than zero
-  for (char *j = json; --len && (j = jsonw_character(buf, j)); buf++)
+char *jsonw_quote(char buf[7], char chr) {
+  char *codept, *codepts = JSON_CODEPTS;
+  if (chr && (codept = strchr(codepts, chr)))
+    return *buf++ = '\\', *buf++ = JSON_ESCAPES[codept - codepts], buf;
+
+  if ((unsigned char)chr >= ' ' && chr != '"')
+    return *buf++ = chr, buf;
+
+  // only control codes less than ' ' remain
+  strcpy(buf, "\\u00"), buf += 4;
+  unsigned char lo = chr & 0xf, hi = chr >> 4 & 0xf;
+  *buf++ = hi + '0', *buf++ = lo < 10 ? lo + '0' : lo - 10 + 'a';
+  return buf;
+}
+
+char *jsonw_escape(char *buf, size_t size, char *str) {
+  // the size of `buf` shall be strictly greater than zero
+  for (char *end = buf + size; *str && buf + 7 < end; str++)
+    buf = jsonw_quote(buf, *str);
+  return *buf = '\0', str;
+}
+
+char *jsonw_unescape(char *buf, size_t size, char *json) {
+  // the size of `buf` shall be strictly greater than zero
+  for (char *j = json; size-- > 1 && (j = jsonw_character(buf, j)); buf++)
     json = j;
   return *buf = '\0', json;
 }
