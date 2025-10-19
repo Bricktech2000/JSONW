@@ -46,6 +46,6 @@ int jsonw_strcmp(char *str, char *json); // compare C string to JSON string lit
 char *jsonw_index(size_t idx, char *json);  // get subscript `idx` of array
 char *jsonw_find(char *name, char *json);   // find key `name` in object
 char *jsonw_lookup(char *name, char *json); // look up value of key `name`
-char *jsonw_quote(char buf[7], char chr);   // escape character lit
+char *jsonw_quote(char buf[sizeof("\\u0000")], char chr); // escape char lit
 char *jsonw_escape(char *buf, size_t size, char *str);    // escape string lit
-char *jsonw_unescape(char *buf, size_t size, char *json); // unescape string lit
+char *jsonw_unescape(char *buf, size_t size, char *json); // unecsape string lit
