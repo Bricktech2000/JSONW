@@ -1,6 +1,6 @@
 # JSONW
 
-_Tiny RFC 8259-compliant JSON parser for C_
+_Tiny RFC 8259-compliant JSON parser for C_
 
 ## Overview
 
@@ -9,7 +9,7 @@ JSONW is a library for incrementally walking JSON texts and extracting values fr
 - ~200 lines of code;
 - No dependencies;
 - No dynamic allocation;
-- Compliant with RFC 8259.
+- Compliant with RFC 8259.
 
 ## Design
 
@@ -29,12 +29,12 @@ Implementation notes:
 
 Implementation limits:
 
-- Invalid UTF-8 in string literals is left untouched.
+- Invalid UTF‑8 in string literals is left untouched.
 - The range and precision of numbers is that of C `double`s.
 - Exponents are parsed as `unsigned short`s and can wrap around.
 - Excessive nesting of structured types may overflow the stack.
 
-Sanity-check RFC 8259 compliance with:
+Sanity-check RFC 8259 compliance with:
 
 ```sh
 make bin/test
