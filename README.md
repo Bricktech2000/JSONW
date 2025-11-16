@@ -225,6 +225,7 @@ int main(void) {
 
 ```c
 #include "jsonw.h"
+#include <limits.h>
 #include <stdio.h>
 
 char *json = "[{ \"name\": \"John\", \"birth\": 1978 }, { \"birth\": 2010 }, "
@@ -246,7 +247,7 @@ char *deserialize_person(struct person *person, char **warn, char *json) {
 
     if (jsonw_strcmp("birth", jsonw_beginstr(memb)) == 0) {
       double birth;
-      if (jsonw_number(&birth, jsonw_name(memb)) &&
+      if (jsonw_number(&birth, jsonw_name(memb)) && birth <= SHRT_MAX &&
           (person->birth = birth) == birth)
         continue;
       *warn = "invalid birth";
