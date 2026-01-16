@@ -27,9 +27,7 @@ char *jsonw_litstr(char *str, char *json) {
 // characters
 
 char *jsonw_ws(char *json) {
-  while (json && *json && strchr(" \t\n\r", *json))
-    json++;
-  return json;
+  return json ? json + strspn(json, " \t\n\r") : json;
 }
 
 #define WSCHRWS(CHR, JSON) jsonw_ws(jsonw_litchr(CHR, jsonw_ws(JSON)))

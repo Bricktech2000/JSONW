@@ -3,11 +3,11 @@
 #include <stdlib.h>
 
 int main(int argc, char **argv) {
-  long size;
   char *buf = NULL;
   while (*++argv) {
     // printf("parsing %s\n", *argv);
 
+    long size;
     FILE *fp = fopen(*argv, "r");
     if (fp == NULL)
       perror("fopen"), exit(EXIT_FAILURE);
