@@ -245,7 +245,7 @@ char *jsonw_lookup(char *name, char *json) {
   return jsonw_name(jsonw_find(name, json));
 }
 
-char *jsonw_quote(char buf[sizeof("\\u0000")], char chr) {
+char *jsonw_quote(char buf[sizeof "\\u0000"], char chr) {
   char *codept, *codepts = JSON_CODEPTS;
   if (chr && (codept = strchr(codepts, chr)))
     return *buf++ = '\\', *buf++ = JSON_ESCAPES[codept - codepts], buf;
@@ -262,7 +262,7 @@ char *jsonw_quote(char buf[sizeof("\\u0000")], char chr) {
 
 char *jsonw_escape(char *buf, size_t size, char *str) {
   // the size of `buf` shall be strictly greater than zero
-  for (char *end = buf + size; *str && end - buf >= sizeof("\\u0000"); str++)
+  for (char *end = buf + size; *str && end - buf >= sizeof "\\u0000"; str++)
     buf = jsonw_quote(buf, *str);
   return *buf = '\0', str;
 }

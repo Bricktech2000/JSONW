@@ -84,7 +84,7 @@ int main(void) {
   for (char *memb = jsonw_beginobj(json); memb; memb = jsonw_member(memb)) {
     static char key[64];
     jsonw_ty type;
-    if (jsonw_endstr(jsonw_unescape(key, sizeof(key), jsonw_beginstr(memb))) &&
+    if (jsonw_endstr(jsonw_unescape(key, sizeof key, jsonw_beginstr(memb))) &&
         jsonw_value(&type, jsonw_name(memb)))
       printf("key '%s' has value of type '%s'\n", key, types[type]);
   }
@@ -207,9 +207,9 @@ char *serialize_person(char *buf, size_t size, struct person person) {
 }
 
 int main(void) {
-  for (int i = 0; i < sizeof(people) / sizeof(*people); i++) {
+  for (int i = 0; i < sizeof people / sizeof *people; i++) {
     static char buf[64];
-    char *end = serialize_person(buf, sizeof(buf), people[i]);
+    char *end = serialize_person(buf, sizeof buf, people[i]);
     printf(end ? "%s\n" : "%s (buffer exhausted)\n", buf);
   }
 }
@@ -239,7 +239,7 @@ struct person {
 char *deserialize_person(struct person *person, char **warn, char *json) {
   for (char *memb = jsonw_beginobj(json); memb; memb = jsonw_member(memb)) {
     if (jsonw_strcmp("name", jsonw_beginstr(memb)) == 0) {
-      if (jsonw_endstr(jsonw_unescape(person->name, sizeof(person->name),
+      if (jsonw_endstr(jsonw_unescape(person->name, sizeof person->name,
                                       jsonw_beginstr(jsonw_name(memb)))))
         continue;
       *warn = "invalid name";
