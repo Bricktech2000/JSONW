@@ -6,7 +6,7 @@ _Tiny RFC 8259-compliant JSON parser for C_
 
 JSONW is a library for incrementally walking JSON texts and extracting values from them. No parsing pass, no intermediate representation, no convenient high-level API; you’re in the driver’s seat, and it’s a stick shift. JSONW’s features include:
 
-- ~200 lines of code;
+- ~250 lines of code;
 - No dependencies;
 - No dynamic allocation;
 - Compliant with RFC 8259.
@@ -21,15 +21,15 @@ Parsers are written as if wrapped by the `Maybe` monad: they return `NULL` on pa
 
 Implementation notes:
 
+- JSON texts are expected (but not validated) to be UTF‑8.
+- String literals are compared without Unicode normalization.
+- Lone surrogates like `"\uD800"` are converted to invalid UTF‑8.
+- Unescaped `\x7F`s in string literals parse succesfully.
+- `"\u0000"`s in string literals can be handled.
 - Objects with duplicate keys can be handled.
-- `"\u0000"`s in string literals don’t cause issues.
-- Unescaped `\x7F`s in string literals are supported.
-- Lone surrogates like `"\uD800"` are parsed correctly.
-- String literals are compared without normalization.
 
 Implementation limits:
 
-- Invalid UTF‑8 in string literals is left untouched.
 - The range and precision of numbers is that of C `double`s.
 - Exponents are parsed as `unsigned short`s and can wrap around.
 - Excessive nesting of structured types may overflow the stack.
@@ -197,10 +197,11 @@ struct person people[] = {
 };
 
 char *serialize_person(char *buf, size_t size, struct person person) {
-  size_t i = 0;
+  size_t i = 0, err;
   i += snprintf(buf + i, size - i, "{ \"name\": \"");
   if (i >= size) return NULL;
-  jsonw_escape(buf + i, size - i, person.name), i += strlen(buf + i);
+  err = *jsonw_escape(buf + i, size - i, person.name), i += strlen(buf + i);
+  if (err) return NULL;
   i += snprintf(buf + i, size - i, "\", \"birth\": %hd }", person.birth);
   if (i >= size) return NULL;
   return buf + i;
@@ -229,7 +230,7 @@ int main(void) {
 #include <stdio.h>
 
 char *json = "[{ \"name\": \"John\", \"birth\": 1978 }, { \"birth\": 2010 }, "
-             "{ \"name\": \"too long\" }, { \"birth\": 1.2 }, { \"age\": 5 }]";
+             "{ \"name\": \"too long\" }, { \"birth\": 3.4 }, { \"age\": 5 }]";
 
 struct person {
   char name[8];
@@ -239,22 +240,18 @@ struct person {
 char *deserialize_person(struct person *person, char **warn, char *json) {
   for (char *memb = jsonw_beginobj(json); memb; memb = jsonw_member(memb)) {
     if (jsonw_strcmp("name", jsonw_beginstr(memb)) == 0) {
-      if (jsonw_endstr(jsonw_unescape(person->name, sizeof person->name,
-                                      jsonw_beginstr(jsonw_name(memb)))))
-        continue;
-      *warn = "invalid name";
-    }
-
-    if (jsonw_strcmp("birth", jsonw_beginstr(memb)) == 0) {
+      if (!jsonw_endstr(jsonw_unescape(person->name, sizeof person->name,
+                                       jsonw_beginstr(jsonw_name(memb)))))
+        *warn = "invalid name";
+    } else if (jsonw_strcmp("birth", jsonw_beginstr(memb)) == 0) {
       double birth;
-      if (jsonw_number(&birth, jsonw_name(memb)) && birth <= SHRT_MAX &&
-          (person->birth = birth) == birth)
-        continue;
-      *warn = "invalid birth";
+      if (!jsonw_number(&birth, jsonw_name(memb)) || birth < 0 ||
+          birth > SHRT_MAX || (person->birth = birth) != birth)
+        *warn = "invalid birth";
+    } else {
+      if (*warn == NULL)
+        *warn = "unknown key";
     }
-
-    if (*warn == NULL)
-      *warn = "unknown key";
   }
 
   return jsonw_object(NULL, json);
@@ -276,7 +273,7 @@ int main(void) {
 (struct person){"John", 1978}
 (struct person){"", 2010}
 (struct person){"too lon", 0} (invalid name)
-(struct person){"", 1} (invalid birth)
+(struct person){"", 3} (invalid birth)
 (struct person){"", 0} (unknown key)
 ```
 

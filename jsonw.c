@@ -102,32 +102,74 @@ char *jsonw_number(double *num, char *json) {
   return *num = significand, json;
 }
 
+char *jsonw_utf16esc(unsigned *cu, char *json) {
+  OUT_PARAM(unsigned, cu);
+  if (json == NULL)
+    return NULL;
+
+  if (*json++ != '\\' || *json++ != 'u')
+    return NULL;
+
+  unsigned codeut = 0; // only write to `cu` on success
+  for (int i = 0; i < 4; i++) {
+    if (!isxdigit(*json))
+      return NULL;
+    codeut <<= 4;
+    codeut |= isdigit(*json) ? *json++ - '0' : tolower(*json++) - 'a' + 10;
+  }
+
+  return *cu = codeut, json;
+}
+
 char *jsonw_character(char *chr, char *json) {
   OUT_PARAM(char, chr);
   if (json == NULL)
     return NULL;
 
+  // the parser state is a single pointer into a JSON text. \uXXXX escapes can
+  // produce several UTF-8 code units so we need to keep track of which one is
+  // to be output next. to do so we allow the parser state to point part way
+  // through a \uXXXX escape; so if the parser state is three characters into
+  // a \uXXXX escape then the third UTF-8 code unit for that escape is to be
+  // output next. this code fragment backtracks to the beginning of a \uXXXX
+  // escape if we're part way through one
+  char *loc = json;
+  while (loc - json < 4 && isxdigit(*json))
+    json--;
+  if (*json-- == 'u' && *json == '\\' || (json = loc))
+    for (char *j = json; *j-- == '\\' && *j-- == '\\';)
+      *j == '\\' || (json = loc);
+  int i = loc - json;
+
+  // when we encounter a \uXXXX escape, parse it into a code point then encode
+  // it into UTF-8. I can't think of a way around it, because ultimately we want
+  // string literals like "\xc4\xa3" and "\\u0123" to compare equal
+  unsigned codeut;
+  if (jsonw_utf16esc(&codeut, json)) {
+    long codept = (json += 6, codeut);
+    if (0xd800 <= codeut && codeut < 0xdc00 && jsonw_utf16esc(&codeut, json) &&
+        0xdc00 <= codeut && codeut < 0xe000) // surrogate pair
+      json += 6, codept = ((codept & 0x3ff) << 10 | codeut & 0x3ff) + 0x10000;
+
+    // the RFC points out that the grammar allows string literals to contain
+    // lone surrogates, but doesn't elaborate; namely it doesn't specify what
+    // sequence of code points the string literal should stand for. according
+    // to Unicode, invalid code points should be replaced by U+FFFD REPLACEMENT
+    // CHARACTER, but if we do that then string literals which contain different
+    // invalid Unicode in different places could compare equal. encoding lone
+    // surrogates into invalid UTF-8 in the canonical way might just be the best
+    // we can do
+    int n = 3 - (codept < 0x10000) - (codept < 0x800) - (codept < 0x80);
+    codept >>= 6 * (n - i);
+    codept &= i ? 0x3f : 0xff;
+    codept |= i ? 0x80 : (int[]){0x00, 0xc0, 0xe0, 0xf0}[n];
+    return *chr = codept, i < n ? loc + 1 : json;
+  }
+
   if (*json == '\\' && json++) {
     char *escape, *escapes = JSON_ESCAPES;
     if (*json && (escape = strchr(escapes, *json)) && json++)
       return *chr = JSON_CODEPTS[escape - escapes], json;
-
-    if (*json == 'u' && json++) {
-      // ISO/IEC 9899:TC3, $5.2.4.2.1: `USHRT_MAX` is at least 65535
-      unsigned short codept = 0;
-      for (int i = 0; i < 4; i++) {
-        if (!isxdigit(*json))
-          return NULL;
-        codept <<= 4;
-        codept |= isdigit(*json) ? *json++ - '0' : tolower(*json++) - 'a' + 10;
-      }
-
-      // if a '\uXXXX' escape is beyond 7-bit ASCII, return a sentinel '\0'
-      // and let clients handle things themselves if they so wish. unicode
-      // shenanigans are beyond the scope of this library
-      return *chr = codept <= 0x7f ? codept : '\0', json;
-    }
-
     return NULL;
   }
 
