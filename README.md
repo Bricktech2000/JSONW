@@ -37,8 +37,8 @@ Implementation limits:
 Sanity-check RFC 8259 compliance with:
 
 ```sh
-make bin/test
-sh -c 'cd tests/ && ../bin/test *.json' # should have no output
+make test
+sh -c 'cd tests/ && ../test *.json' # should have no output
 ```
 
 The tests in [tests/](tests/) are those found in Nicolas Seriot’s JSONTestSuite.
